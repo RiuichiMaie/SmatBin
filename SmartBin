@@ -1,0 +1,146 @@
+#define BLYNK_TEMPLATE_ID "TMPL2tXj1uZN1"
+#define BLYNK_TEMPLATE_NAME "SmartBin"
+#define BLYNK_AUTH_TOKEN "fCxCfe3IId34Q2ubgRPvrNgrKHb0-qKf"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+char ssid[] = "oioi";
+char pass[] = "larissa01";
+
+// ===== PINOS =====
+#define TRIG 27
+#define ECHO 26
+
+#define LED_VERDE 25
+#define LED_AMARELO 33
+#define LED_VERMELHO 32
+
+// ===== LIMITES DA LIXEIRA (em cm) =====
+#define DISTANCIA_MAXIMA  24   // Lixeira completamente vazia
+#define LIMITE_VERDE      12   // Acima disso = verde (vazia)
+#define LIMITE_AMARELO     7   // Entre 7 e 12 = amarelo (média)
+                               // Abaixo de 7  = vermelho (cheia)
+
+BlynkTimer timer;
+
+long duracao;
+float distancia;
+
+void medirDistancia()
+{
+  // ===== SENSOR ULTRASSÔNICO =====
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  duracao = pulseIn(ECHO, HIGH);
+
+  distancia = duracao * 0.034 / 2;
+
+  // ===== LIMITA A LEITURA AO MÁXIMO DEFINIDO =====
+  if(distancia > DISTANCIA_MAXIMA)
+  {
+    distancia = DISTANCIA_MAXIMA;
+  }
+
+  // ===== SERIAL MONITOR =====
+  Serial.println("================================");
+
+  Serial.print("Duracao do pulso: ");
+  Serial.print(duracao);
+  Serial.println(" us");
+
+  Serial.print("Distancia medida: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  // ===== CONTROLE DOS LEDS =====
+  if(distancia < LIMITE_AMARELO)               // Abaixo de 7cm
+  {
+    digitalWrite(LED_VERMELHO, HIGH);
+    digitalWrite(LED_AMARELO, LOW);
+    digitalWrite(LED_VERDE, LOW);
+
+    Blynk.virtualWrite(V2, 0);
+    Blynk.virtualWrite(V3, 1);
+    Blynk.virtualWrite(V4, 0);
+
+    Serial.println("Status: LIXEIRA CHEIA");
+  }
+  else if(distancia >= LIMITE_AMARELO && distancia <= LIMITE_VERDE)  // Entre 7 e 12cm
+  {
+    digitalWrite(LED_VERMELHO, LOW);
+    digitalWrite(LED_AMARELO, HIGH);
+    digitalWrite(LED_VERDE, LOW);
+
+    Blynk.virtualWrite(V2, 0);
+    Blynk.virtualWrite(V3, 0);
+    Blynk.virtualWrite(V4, 1);
+
+    Serial.println("Status: LIXEIRA MEDIA");
+  }
+  else                                         // Acima de 12cm
+  {
+    digitalWrite(LED_VERMELHO, LOW);
+    digitalWrite(LED_AMARELO, LOW);
+    digitalWrite(LED_VERDE, HIGH);
+
+    Blynk.virtualWrite(V2, 1);
+    Blynk.virtualWrite(V3, 0);
+    Blynk.virtualWrite(V4, 0);
+
+    Serial.println("Status: LIXEIRA VAZIA");
+  }
+
+  // ===== CAPACIDADE =====
+  // Mapeia: 24cm = 0% cheio | 0cm = 100% cheio
+  int capacidade = map(distancia, DISTANCIA_MAXIMA, 0, 0, 100);
+  capacidade = constrain(capacidade, 0, 100);
+
+  Serial.print("Capacidade: ");
+  Serial.print(capacidade);
+  Serial.println("%");
+
+  // ===== ENVIA PARA BLYNK =====
+  Blynk.virtualWrite(V0, distancia);
+  Blynk.virtualWrite(V1, capacidade);
+
+  Serial.println("Dados enviados ao Blynk!");
+  Serial.println("================================\n");
+}
+
+void setup()
+{
+  // ===== SERIAL =====
+  Serial.begin(115200);
+
+  Serial.println("Iniciando SmartBin...");
+  Serial.println("Conectando ao WiFi e Blynk...");
+
+  // ===== PINOS =====
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+
+  pinMode(LED_VERDE, OUTPUT);
+  pinMode(LED_AMARELO, OUTPUT);
+  pinMode(LED_VERMELHO, OUTPUT);
+
+  // ===== BLYNK =====
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  Serial.println("Conectado com sucesso!");
+  Serial.println("Sistema iniciado.\n");
+
+  // Mede a cada 2 segundos
+  timer.setInterval(2000L, medirDistancia);
+}
+
+void loop()
+{
+  Blynk.run();
+  timer.run();
+}
